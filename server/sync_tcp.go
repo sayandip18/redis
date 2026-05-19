@@ -12,7 +12,7 @@ import (
 	"github.com/sayandip/redis/core"
 )
 
-func readCommand(c net.Conn) (*core.RedisCmd, error) {
+func readCommand(c io.ReadWriter) (*core.RedisCmd, error) {
 	// TODO: Max read in one shot is 512 bytes
 	// To allow input > 512 bytes, then repeated read until
 	// we get EOF or designated delimiter
@@ -33,11 +33,11 @@ func readCommand(c net.Conn) (*core.RedisCmd, error) {
 	}, nil
 }
 
-func respondError(err error, c net.Conn) {
+func respondError(err error, c io.ReadWriter) {
 	c.Write([]byte(fmt.Sprintf("-%s\r\n", err)))
 }
 
-func respond(cmd *core.RedisCmd, c net.Conn) {
+func respond(cmd *core.RedisCmd, c io.ReadWriter) {
 	err := core.EvalAndRespond(cmd, c)
 	if err != nil {
 		respondError(err, c)
@@ -51,27 +51,25 @@ func RunSyncTCPServer() {
 
 	listener, err := net.Listen("tcp", config.Host+":"+strconv.Itoa(config.Port))
 	if err != nil {
-		panic(err)
+		log.Println("err", err)
+		return
 	}
 
 	for {
 		c, err := listener.Accept()
 		if err != nil {
-			panic(err)
+			log.Println("err", err)
 		}
 		con_clients++
-		log.Println("client connected with address:", c.RemoteAddr(), "concurrent clients", con_clients)
 
 		for {
 			cmd, err := readCommand(c)
 			if err != nil {
 				c.Close()
 				con_clients--
-				log.Println("client disconnected", c.RemoteAddr(), "concurrent clients", con_clients)
 				if err == io.EOF {
 					break
 				}
-				log.Println("err", err)
 			}
 			respond(cmd, c)
 		}
